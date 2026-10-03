@@ -39,4 +39,4 @@ TARGET_MAP_WIDTH_PX = 2000
 
 COLORMAP = "turbo"
 OVERLAY_ALPHA = 0.55
-OUTPUT_DPI = 200
+OUTPUT_DPI = 200  # at the default width; scaled with --width-px so text keeps its relative size

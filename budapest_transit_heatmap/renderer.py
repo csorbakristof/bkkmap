@@ -11,7 +11,9 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import requests  # noqa: E402
 from matplotlib.colors import Normalize  # noqa: E402
+from matplotlib.patches import Polygon  # noqa: E402
 from matplotlib.ticker import MaxNLocator  # noqa: E402
+from matplotlib.transforms import Affine2D, ScaledTranslation  # noqa: E402
 from PIL import Image  # noqa: E402
 from pyproj import Transformer  # noqa: E402
 
@@ -27,7 +29,8 @@ _to_wgs = Transformer.from_crs(EPSG_WEB_MERCATOR, EPSG_WGS84, always_xy=True)
 
 def _zoom_for(extent, target_px):
     world_frac = (extent[1] - extent[0]) / (2 * MERC_HALF)
-    return int(min(18, max(1, math.ceil(math.log2(target_px / (world_frac * TILE_SIZE))))))
+    # Allow up to ~15% upscaling of tiles before moving to the next zoom (4x more tiles).
+    return int(min(18, max(1, math.ceil(math.log2(target_px / (world_frac * TILE_SIZE)) - 0.2))))
 
 
 def _tile_range(extent, z):
@@ -77,6 +80,21 @@ def fetch_basemap(extent, tile_cache=None, target_px=TARGET_MAP_WIDTH_PX):
     return img, img_extent
 
 
+def _draw_flag(ax, fig, x, y, height_pt=44):
+    """Flag whose pole foot sits on data point (x, y). Sized in points, so it scales with the figure."""
+    h = height_pt
+    # Shape coordinates are in points relative to the pole foot.
+    pole = [(-1.2, 0), (1.2, 0), (1.2, h), (-1.2, h)]
+    banner = [(1.2, h), (h * 0.62, h * 0.92), (h * 0.5, h * 0.78), (h * 0.62, h * 0.64), (1.2, h * 0.56)]
+    trans = (Affine2D().scale(1 / 72) + fig.dpi_scale_trans + ScaledTranslation(x, y, ax.transData))
+    ax.add_patch(Polygon(pole, closed=True, facecolor="#222222", edgecolor="white", linewidth=1.2,
+                         transform=trans, zorder=8, clip_on=False))
+    ax.add_patch(Polygon(banner, closed=True, facecolor="#e60000", edgecolor="white", linewidth=1.2,
+                         transform=trans, zorder=9, clip_on=False))
+    ax.plot(x, y, marker="o", markersize=5, color="#222222", markeredgecolor="white", markeredgewidth=1,
+            zorder=8)
+
+
 def _nice_length(max_m):
     exp = 10 ** math.floor(math.log10(max_m))
     for m in (5, 2, 1):
@@ -100,7 +118,8 @@ def _draw_scale_bar(ax, extent, center_lat):
             bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1))
 
 
-def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, metadata, tile_cache=None):
+def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, metadata, tile_cache=None,
+               width_px=TARGET_MAP_WIDTH_PX):
     """Write the heatmap PNG. `extent` is the grid's (left, right, bottom, top) in EPSG:3857."""
     vmin, vmax = float(np.min(grid_matrix)), float(np.max(grid_matrix))
     if vmax - vmin < 1e-6:
@@ -108,10 +127,11 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
 
     aspect = (extent[3] - extent[2]) / (extent[1] - extent[0])
     fig_w = TARGET_MAP_WIDTH_PX / OUTPUT_DPI
+    dpi = OUTPUT_DPI * width_px / TARGET_MAP_WIDTH_PX
     fig, ax = plt.subplots(figsize=(fig_w * 1.12, fig_w * aspect))
     fig.subplots_adjust(left=0.01, right=0.88, top=0.99, bottom=0.01)
 
-    basemap = fetch_basemap(extent, tile_cache)
+    basemap = fetch_basemap(extent, tile_cache, width_px)
     if basemap is not None:
         img, img_extent = basemap
         ax.imshow(np.asarray(img), extent=img_extent, origin="upper", interpolation="bilinear", zorder=0)
@@ -129,7 +149,7 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
         ax.clabel(cs, fmt="%d'", fontsize=6, inline=True)
 
     sx, sy = _to_merc.transform(start_lon, start_lat)
-    ax.plot(sx, sy, marker="*", markersize=18, color="red", markeredgecolor="white", markeredgewidth=1.5, zorder=8)
+    _draw_flag(ax, fig, sx, sy)
 
     ax.set_xlim(extent[0], extent[1])
     ax.set_ylim(extent[2], extent[3])
@@ -151,6 +171,6 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
             bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1))
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=OUTPUT_DPI)
+    fig.savefig(output_path, dpi=dpi)
     plt.close(fig)
     log.info("Map written to %s", output_path)

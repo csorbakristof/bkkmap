@@ -16,7 +16,7 @@ The system features:
 1. **Walking Route Calculation:**
    - **Method:** Geodesic (Haversine) distance multiplied by a detour coefficient ($1.25$) to model real street geometry without requiring heavy OSM street graph parsing or C-based spatial libraries.
    - **Walk Speed:** $4.0 \text{ km/h}$ ($\approx 66.67 \text{ meters/minute}$).
-   - **Max Walking Horizon:** $30 \text{ minutes}$ to/from transit stops. If no transit option reaches a point, direct walking travel time is evaluated for every pixel across the entire map extent.
+   - **Max Walking Horizon:** $30 \text{ minutes}$ for the access walk from the origin to the first stop. The egress walk after the last stop is **not** limited: points farther than 30 minutes from any reached stop get the arrival time at that stop plus the full walk (capped only by `--max-cutoff`). This avoids an artificial cliff at the edge of the transit network, where travel times would otherwise jump straight to the cutoff. Direct walking from the origin is also evaluated for every pixel across the entire map extent.
 
 2. **GTFS Feeds & Data Sources:**
    - Fully automated URL-based downloading.
@@ -41,14 +41,16 @@ The system features:
 | :--- | :--- | :--- | :--- |
 | `--start-lat` | `float` | **Required** | Latitude of origin (e.g., `47.3783` for Érd or `47.4979` for Budapest). |
 | `--start-lon` | `float` | **Required** | Longitude of origin (e.g., `18.9181`). |
-| `--datetime` | `string` | *Current Time* | Departure date & time in ISO format (`YYYY-MM-DDTHH:MM:SS`). |
+| `--datetime` | `string` | *Next Monday, 09:00* | Departure date & time in ISO format (`YYYY-MM-DDTHH:MM:SS`). |
 | `--bbox` | `float x 4` | `47.25 18.80 47.60 19.30` | Map Bounding box: `min_lat min_lon max_lat max_lon`. |
-| `--resolution` | `int` | `200` | Spatial resolution of raster grid cells in meters (e.g., 200m). |
+| `--resolution` | `int` | `67` | Spatial resolution of raster grid cells in meters (e.g., 200 for a fast preview). |
+| `--width-px` | `int` | `6000` | Width in pixels of the map area in the output image (the full image is ~12% wider because of the legend). |
 | `--walk-speed` | `float` | `4.0` | Assumed walking speed in km/h. |
-| `--max-walk-time` | `float` | `30.0` | Maximum allowed walk time to/from transit stops (minutes). |
+| `--max-walk-time` | `float` | `30.0` | Maximum walk time from the origin to the first transit stop (minutes). Also the radius of the exact stop-to-cell egress evaluation; longer egress walks are added by grid propagation (§4.3). |
 | `--transfer-penalty`| `float` | `3.0` | Transfer penalty added per transit line change (minutes). |
 | `--max-cutoff` | `float` | `180.0` | Horizon limit in minutes (3 hours). |
 | `--output` | `string` | `transit_heatmap.png` | Path for the generated map image. |
+| `--extra-feed` | `string` (repeatable) | *none* | Additional GTFS zip (URL or local path), e.g. the registered MÁV / Volánbusz feeds. Archives placed in `--cache-dir` are picked up automatically. |
 | `--cache-dir` | `string` | `./gtfs_cache` | Directory to store GTFS feed downloads. |
 
 ---
@@ -81,7 +83,11 @@ CSA processes timetable connections in chronological order of departure time $t_
 For a grid cell center $p(x, y)$:
 $$T_{direct\_walk}(p) = T_{walk}(O, p)$$
 $$T_{transit}(p) = \min_{s \in S_{reached}} \left[ (\tau[s] - t_{start}) + T_{walk}(s, p) \right]$$
-$$T_{final}(p) = \min\left( T_{direct\_walk}(p), \; T_{transit}(p) \right)$$
+$$T_{0}(p) = \min\left( T_{direct\_walk}(p), \; T_{transit}(p) \right)$$
+
+$T_{transit}$ is evaluated exactly (Haversine) only for stop–cell pairs with $T_{walk}(s, p) \le \text{max\_walk\_time}$. Longer egress walks are covered by propagating walking times across the grid:
+$$T_{final}(p) = \min_{q \in \text{grid}} \left[ T_{0}(q) + T_{gridwalk}(q, p) \right]$$
+where $T_{gridwalk}$ is the shortest walk over the raster graph whose cells connect to their 16 neighbors (king + knight moves; edge length $= \text{resolution} \times \sqrt{\Delta r^2 + \Delta c^2}$, converted with the same detour factor and walk speed). It is computed in one pass with Dijkstra's algorithm (`scipy.sparse.csgraph.dijkstra`) from a virtual source connected to every cell $q$ with edge weight $T_{0}(q)$. Grid paths are at most ~3% longer than straight lines, so the result never underestimates the walk.
 
 Values are capped at $T_{cutoff} = 180 \text{ minutes}$.
 
@@ -97,6 +103,7 @@ budapest_transit_heatmap/
 ├── config.py             # Default constants, feed URLs, color palettes
 ├── downloader.py         # HTTP fetcher & cache manager for GTFS
 ├── gtfs_parser.py        # Date/calendar active service filtering & connection builder
+├── geo.py                # Shared Haversine / walking-time helpers
 ├── csa_solver.py         # Vectorized Connection Scan Algorithm routing engine
 ├── grid_evaluator.py     # NumPy spatial grid evaluation matrix builder
 └── renderer.py           # PyProj + PIL + Matplotlib OSM tile stitching & cartographic exporter
@@ -110,7 +117,8 @@ budapest_transit_heatmap/
 - Stores default bounding box for Budapest + Érd region: `[47.25, 18.80, 47.60, 19.30]`.
 - Direct static feed URLs for BKK, MÁV, and Volánbusz.
 - Standard EPSG projection codes (`4326` WGS84, `3857` Web Mercator).
-- Tile server templates (e.g., CartoDB Positron / OSM Light).
+- Tile server template: standard OpenStreetMap tiles (`tile.openstreetmap.org`). CARTO basemaps now require an API key and must not be used, as the tiles come back with an "API key required" watermark. Tiles are cached on disk (OSM tile usage policy) and desaturated so the heatmap stays readable.
+- Rendering defaults: 6000 px wide map area (`--width-px`), 67 m grid, `turbo` colormap, DPI scaled with the width.
 
 #### Module 2: `downloader.py`
 - `download_gtfs_feeds(cache_dir, max_age_days=7)`:
@@ -143,15 +151,16 @@ budapest_transit_heatmap/
   - Generates 2D arrays of grid cell coordinates (lat/lon).
   - Calculates direct walk time matrix from origin to every cell.
   - Computes transfer walk time from every reached transit stop to nearby grid cells within `max_walk_time`.
+  - Propagates walking times across the grid (16-neighbor Dijkstra, §4.3) so cells beyond `max_walk_time` from every stop still get stop arrival + walk instead of falling back to the direct walk.
   - Minimizes across all options using `np.minimum`.
 
 #### Module 6: `renderer.py`
-- `render_map(grid_matrix, bbox, start_lat, start_lon, output_path)`:
+- `render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, metadata, tile_cache, width_px)`:
   - Computes bounding box extent in Web Mercator projection (`EPSG:3857`).
-  - Fetches and stitches OpenStreetMap/CartoDB background tiles for the bounding box.
+  - Fetches and stitches OpenStreetMap background tiles for the bounding box. The zoom level is chosen from `width_px` (zoom 14, ~580 tiles, for the default 6000 px). Non-image tile responses are rejected and never cached.
   - Overlays the computed grid matrix using `matplotlib.pyplot.imshow`.
-  - Applies dynamic colormap (`viridis_r` / `YlOrRd`) normalized to `[min_time, max_time_found_in_bbox]`.
-  - Draws origin marker (star / pin), colorbar legend with minute ticks, scale bar, and metadata text box (date, start time, max duration).
+  - Applies dynamic colormap (`turbo`) normalized to `[min_time, max_time_found_in_bbox]`.
+  - Draws the origin marker as a red flag on a pole (sized in points, so it scales with the image), 15-minute isochrone contour lines, colorbar legend with minute ticks, scale bar, and metadata text box (date, start time, max duration).
   - Saves high-DPI `.png` output file.
 
 #### Module 7: `main.py`

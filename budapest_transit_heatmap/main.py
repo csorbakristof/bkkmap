@@ -4,7 +4,7 @@ import logging
 import sys
 import time
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from config import DEFAULT_BBOX
@@ -17,20 +17,28 @@ from renderer import render_map
 log = logging.getLogger("transit_heatmap")
 
 
+def next_monday_9am(now=None):
+    """09:00 on the first Monday strictly after today."""
+    now = now or datetime.now()
+    days = 7 - now.weekday()  # Monday is 0; if today is Monday this gives 7
+    return (now + timedelta(days=days)).replace(hour=9, minute=0, second=0, microsecond=0)
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Public transit travel-time heatmap for Budapest & Érd.")
     p.add_argument("--start-lat", type=float, required=True, help="Origin latitude, e.g. 47.4979")
     p.add_argument("--start-lon", type=float, required=True, help="Origin longitude, e.g. 19.0402")
     p.add_argument("--datetime", type=datetime.fromisoformat, default=None,
-                   help="Departure time, YYYY-MM-DDTHH:MM:SS (default: now)")
+                   help="Departure time, YYYY-MM-DDTHH:MM:SS (default: next Monday 09:00)")
     p.add_argument("--bbox", type=float, nargs=4, default=list(DEFAULT_BBOX),
                    metavar=("MIN_LAT", "MIN_LON", "MAX_LAT", "MAX_LON"))
-    p.add_argument("--resolution", type=int, default=200, help="Grid cell size in meters")
+    p.add_argument("--resolution", type=int, default=67, help="Grid cell size in meters")
     p.add_argument("--walk-speed", type=float, default=4.0, help="Walking speed in km/h")
     p.add_argument("--max-walk-time", type=float, default=30.0, help="Max walk to/from stops in minutes")
     p.add_argument("--transfer-penalty", type=float, default=3.0, help="Minutes added per vehicle change")
     p.add_argument("--max-cutoff", type=float, default=180.0, help="Travel time horizon in minutes")
     p.add_argument("--output", default="transit_heatmap.png")
+    p.add_argument("--width-px", type=int, default=6000, help="Width of the map area in the output image (pixels)")
     p.add_argument("--cache-dir", default="./gtfs_cache")
     p.add_argument("--extra-feed", action="append", default=[],
                    help="Additional GTFS zip (URL or local path); may be repeated")
@@ -39,10 +47,10 @@ def parse_args(argv=None):
     min_lat, min_lon, max_lat, max_lon = args.bbox
     if not (min_lat < max_lat and min_lon < max_lon):
         p.error("--bbox must be MIN_LAT MIN_LON MAX_LAT MAX_LON")
-    if args.resolution <= 0 or args.walk_speed <= 0 or args.max_cutoff <= 0:
-        p.error("--resolution, --walk-speed and --max-cutoff must be positive")
+    if args.resolution <= 0 or args.walk_speed <= 0 or args.max_cutoff <= 0 or args.width_px <= 0:
+        p.error("--resolution, --walk-speed, --max-cutoff and --width-px must be positive")
     if args.datetime is None:
-        args.datetime = datetime.now().replace(microsecond=0)
+        args.datetime = next_monday_9am()
     return args
 
 
@@ -81,7 +89,7 @@ def main(argv=None):
             f"Feeds: {', '.join(feeds)}  |  grid {args.resolution} m",
         ]
         render_map(grid, extent, args.bbox, args.start_lat, args.start_lon, args.output, metadata,
-                   tile_cache=cache_dir / "tiles")
+                   tile_cache=cache_dir / "tiles", width_px=args.width_px)
     return 0
 
 

@@ -4,6 +4,8 @@ import math
 
 import numpy as np
 from pyproj import Transformer
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
 from config import EPSG_WEB_MERCATOR, EPSG_WGS84
@@ -12,6 +14,9 @@ from geo import haversine_m, local_xy_m, max_walk_radius_m, walk_minutes
 log = logging.getLogger(__name__)
 
 CELL_CHUNK = 50_000
+
+# 16-neighborhood (king + knight moves): grid paths are at most ~3% longer than straight lines.
+_NEIGHBOR_OFFSETS = [(0, 1), (1, 0), (1, 1), (1, -1), (1, 2), (2, 1), (1, -2), (2, -1)]
 
 _to_merc = Transformer.from_crs(EPSG_WGS84, EPSG_WEB_MERCATOR, always_xy=True)
 _to_wgs = Transformer.from_crs(EPSG_WEB_MERCATOR, EPSG_WGS84, always_xy=True)
@@ -37,9 +42,43 @@ def make_grid(bbox, resolution_m):
     return lat, lon, extent
 
 
+def propagate_walking(seed_minutes, resolution_m, walk_speed, max_cutoff):
+    """Lower every cell to min over all cells q of (seed[q] + walk from q), walking over the grid.
+
+    Extends egress walks beyond the exact per-stop radius: a cell far from any stop
+    gets the arrival time of a reachable cell plus the walk from there.
+    """
+    nrows, ncols = seed_minutes.shape
+    n = nrows * ncols
+    idx = np.arange(n).reshape(nrows, ncols)
+    src, dst, wt = [], [], []
+    for dr, dc in _NEIGHBOR_OFFSETS:
+        r0, r1 = max(0, -dr), nrows - max(0, dr)
+        c0, c1 = max(0, -dc), ncols - max(0, dc)
+        a = idx[r0:r1, c0:c1].ravel()
+        b = idx[r0 + dr:r1 + dr, c0 + dc:c1 + dc].ravel()
+        w = walk_minutes(resolution_m * np.hypot(dr, dc), walk_speed)
+        src += [a, b]
+        dst += [b, a]
+        wt += [np.full(len(a), w), np.full(len(a), w)]
+    # A virtual source node n connects to each seeded cell with its seed time
+    # (+epsilon, because explicit zeros would be dropped from the sparse matrix).
+    flat = seed_minutes.ravel()
+    seeded = np.flatnonzero(flat < max_cutoff)
+    src.append(np.full(len(seeded), n))
+    dst.append(seeded)
+    wt.append(flat[seeded] + 1e-6)
+    graph = csr_matrix((np.concatenate(wt), (np.concatenate(src), np.concatenate(dst))), shape=(n + 1, n + 1))
+    dist = dijkstra(graph, directed=True, indices=n, limit=max_cutoff)[:n]
+    return np.minimum(seed_minutes, dist.reshape(nrows, ncols))
+
+
 def compute_travel_time_grid(bbox, resolution_m, start_lat, start_lon, stops_df, tau, departure_sec,
                              walk_speed, max_walk_time, max_cutoff):
     """Travel time in minutes for every grid cell, capped at max_cutoff.
+
+    max_walk_time bounds the exact stop-to-cell walk; longer walks after the last
+    stop are covered by propagating walking times over the grid.
 
     Returns (grid_minutes [nrows, ncols], extent_3857).
     """
@@ -70,6 +109,7 @@ def compute_travel_time_grid(bbox, resolution_m, start_lat, start_lon, stops_df,
             ok = w <= max_walk_time
             np.minimum.at(best, ci[ok] + start, s_rel[si[ok]] + w[ok])
 
-    grid = np.minimum(best, max_cutoff).reshape(lat.shape)
+    best = propagate_walking(best.reshape(lat.shape), resolution_m, walk_speed, max_cutoff)
+    grid = np.minimum(best, max_cutoff)
     log.info("Grid: travel times %.1f - %.1f min", grid.min(), grid.max())
     return grid, extent

@@ -16,6 +16,8 @@ pip install -r requirements.txt
 python budapest_transit_heatmap/main.py --start-lat 47.4979 --start-lon 19.0402 --datetime 2026-10-05T08:00:00
 ```
 See `--help` for all options (bbox, resolution, walk speed, transfer penalty, cutoff, output, cache dir).
+Defaults: departure next Monday 09:00, 67 m grid, 6000 px wide map (a ~6700 px, ~35 MB image; the first run
+downloads ~600 OSM tiles, cached afterwards). For a quick preview use e.g. `--resolution 200 --width-px 2000`.
 
 The first run downloads the BKK feed (~56 MB) and parses that day's timetable (~10 s); both are cached in
 `--cache-dir`, so later runs for the same date only take the time needed to fetch basemap tiles.
@@ -28,6 +30,8 @@ Once you have the archives, either drop them into the cache dir as `mav.zip` / `
 
 ## Modelling notes
 - Walking = haversine distance × 1.25 at the given speed; transfers between stops within a 5 min walk are allowed.
+- `--max-walk-time` limits the walk from the origin to the first stop. The walk after the last stop is unlimited
+  (propagated over the grid), so travel times fade out smoothly beyond the transit network.
 - The transfer penalty applies whenever you board a new vehicle after having ridden one.
 - Trips from the previous service day running past midnight are included.
 - Cells beyond `--max-cutoff` are capped at the top color.
