@@ -1,4 +1,4 @@
-"""OSM/CARTO tile stitching and cartographic heatmap export."""
+"""Basemap (OSM data or OSM tiles) and cartographic heatmap export."""
 import io
 import logging
 import math
@@ -17,6 +17,7 @@ from matplotlib.transforms import Affine2D, ScaledTranslation  # noqa: E402
 from PIL import Image  # noqa: E402
 from pyproj import Transformer  # noqa: E402
 
+from basemap import draw_osm_basemap, draw_place_labels, meters_per_pixel  # noqa: E402
 from config import (BASEMAP_DESATURATION, COLORMAP, EPSG_WEB_MERCATOR, EPSG_WGS84, HTTP_USER_AGENT, OUTPUT_DPI,  # noqa: E402
                     CONTOUR_INTERVAL_MIN, OVERLAY_ALPHA, TARGET_MAP_WIDTH_PX, TILE_ATTRIBUTION, TILE_SIZE, TILE_URL)
 
@@ -87,12 +88,13 @@ def _draw_flag(ax, fig, x, y, height_pt=44):
     pole = [(-1.2, 0), (1.2, 0), (1.2, h), (-1.2, h)]
     banner = [(1.2, h), (h * 0.62, h * 0.92), (h * 0.5, h * 0.78), (h * 0.62, h * 0.64), (1.2, h * 0.56)]
     trans = (Affine2D().scale(1 / 72) + fig.dpi_scale_trans + ScaledTranslation(x, y, ax.transData))
-    ax.add_patch(Polygon(pole, closed=True, facecolor="#222222", edgecolor="white", linewidth=1.2,
-                         transform=trans, zorder=8, clip_on=False))
-    ax.add_patch(Polygon(banner, closed=True, facecolor="#e60000", edgecolor="white", linewidth=1.2,
-                         transform=trans, zorder=9, clip_on=False))
+    artists = [ax.add_patch(Polygon(pole, closed=True, facecolor="#222222", edgecolor="white", linewidth=1.2,
+                                    transform=trans, zorder=8, clip_on=False)),
+               ax.add_patch(Polygon(banner, closed=True, facecolor="#e60000", edgecolor="white", linewidth=1.2,
+                                    transform=trans, zorder=9, clip_on=False))]
     ax.plot(x, y, marker="o", markersize=5, color="#222222", markeredgecolor="white", markeredgewidth=1,
             zorder=8)
+    return artists
 
 
 def _nice_length(max_m):
@@ -114,13 +116,18 @@ def _draw_scale_bar(ax, extent, center_lat):
     ax.fill_between([x0 + length_merc / 2, x0 + length_merc], y0, y0 + h, color="white", edgecolor="black",
                     linewidth=0.8, zorder=7)
     label = f"{length_m / 1000:g} km" if length_m >= 1000 else f"{length_m:g} m"
-    ax.text(x0 + length_merc / 2, y0 + 2 * h, label, ha="center", va="bottom", fontsize=9, zorder=7,
+    return ax.text(x0 + length_merc / 2, y0 + 2 * h, label, ha="center", va="bottom", fontsize=9, zorder=7,
             bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1))
 
 
 def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, metadata, tile_cache=None,
-               width_px=TARGET_MAP_WIDTH_PX, overlay_alpha=OVERLAY_ALPHA, contour_interval=CONTOUR_INTERVAL_MIN):
-    """Write the heatmap PNG. `extent` is the grid's (left, right, bottom, top) in EPSG:3857."""
+               width_px=TARGET_MAP_WIDTH_PX, overlay_alpha=OVERLAY_ALPHA, contour_interval=CONTOUR_INTERVAL_MIN,
+               basemap="tiles", osm_features=None, roads=None, label_scale=1.0):
+    """Write the heatmap PNG. `extent` is the grid's (left, right, bottom, top) in EPSG:3857.
+
+    basemap: "osm" draws the background and place labels from osm_features/roads,
+    "tiles" uses OSM raster tiles, "none" leaves it blank.
+    """
     vmin, vmax = float(np.min(grid_matrix)), float(np.max(grid_matrix))
     if vmax - vmin < 1e-6:
         vmax = vmin + 1.0
@@ -131,10 +138,14 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
     fig, ax = plt.subplots(figsize=(fig_w * 1.12, fig_w * aspect))
     fig.subplots_adjust(left=0.01, right=0.88, top=0.99, bottom=0.01)
 
-    basemap = fetch_basemap(extent, tile_cache, width_px)
-    if basemap is not None:
-        img, img_extent = basemap
-        ax.imshow(np.asarray(img), extent=img_extent, origin="upper", interpolation="bilinear", zorder=0)
+    mpp = meters_per_pixel(extent, width_px, (bbox[0] + bbox[2]) / 2)
+    if basemap == "osm":
+        draw_osm_basemap(ax, osm_features, roads, extent, mpp)
+    elif basemap == "tiles":
+        tiles = fetch_basemap(extent, tile_cache, width_px)
+        if tiles is not None:
+            img, img_extent = tiles
+            ax.imshow(np.asarray(img), extent=img_extent, origin="upper", interpolation="bilinear", zorder=0)
 
     norm = Normalize(vmin=vmin, vmax=vmax)
     im = ax.imshow(grid_matrix, extent=extent, origin="upper", cmap=COLORMAP, norm=norm,
@@ -149,7 +160,7 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
         ax.clabel(cs, fmt="%d'", fontsize=6, inline=True)
 
     sx, sy = _to_merc.transform(start_lon, start_lat)
-    _draw_flag(ax, fig, sx, sy)
+    flag = _draw_flag(ax, fig, sx, sy)
 
     ax.set_xlim(extent[0], extent[1])
     ax.set_ylim(extent[2], extent[3])
@@ -163,12 +174,15 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
     cb.update_ticks()
     cb.set_label("Travel time (minutes)")
 
-    _draw_scale_bar(ax, extent, (bbox[0] + bbox[2]) / 2)
+    scale_label = _draw_scale_bar(ax, extent, (bbox[0] + bbox[2]) / 2)
 
-    ax.text(0.015, 0.985, "\n".join(metadata), transform=ax.transAxes, ha="left", va="top", fontsize=8, zorder=9,
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85, edgecolor="gray"))
-    ax.text(0.995, 0.005, TILE_ATTRIBUTION, transform=ax.transAxes, ha="right", va="bottom", fontsize=6, zorder=9,
-            bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1))
+    info = ax.text(0.015, 0.985, "\n".join(metadata), transform=ax.transAxes, ha="left", va="top", fontsize=8,
+                   zorder=9, bbox=dict(boxstyle="round", facecolor="white", alpha=0.85, edgecolor="gray"))
+    credit = ax.text(0.995, 0.005, TILE_ATTRIBUTION, transform=ax.transAxes, ha="right", va="bottom", fontsize=6,
+                     zorder=9, bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1))
+
+    if basemap == "osm":
+        draw_place_labels(ax, osm_features, extent, mpp, avoid=[info, credit, scale_label, *flag], scale=label_scale)
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=dpi)

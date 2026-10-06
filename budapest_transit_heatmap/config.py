@@ -62,12 +62,33 @@ WALK_DETOUR_FACTOR = 1.25
 # Max walking time between two nearby stops for transfers inside the CSA (minutes).
 MAX_TRANSFER_WALK_MIN = 5.0
 
-# OSM standard tiles (CARTO basemaps now require an API key). Tiles are cached on
+# OSM standard tiles for --basemap tiles (CARTO basemaps now require an API key). Tiles are cached on
 # disk per the OSM tile usage policy and desaturated before use.
 TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 TILE_SIZE = 256
 TILE_ATTRIBUTION = "© OpenStreetMap contributors"
 BASEMAP_DESATURATION = 0.75  # 0 = original colors, 1 = grayscale
+
+# Basemap drawn from OSM data (--basemap osm): muted colors so the heatmap stays readable.
+BASEMAP_COLORS = {
+    "land": "#f4f3ef", "builtup": "#dedcd6", "water": "#a8c4dc", "rail": "#7a7a7a",
+    "border": "#555555", "major": "#8c8c8c", "road": "#a8a8a8", "minor": "#c2c2c2", "label": "#1a1a1a",
+}
+# highway class -> (color key, linewidth pt, drawn up to this many meters/pixel, zorder)
+ROAD_STYLE = {
+    "motorway": ("major", 0.9, 1e9, 0.49), "trunk": ("major", 0.75, 1e9, 0.48),
+    "motorway_link": ("major", 0.4, 40, 0.47), "trunk_link": ("major", 0.4, 40, 0.47),
+    "primary": ("road", 0.55, 400, 0.46), "primary_link": ("road", 0.35, 40, 0.45),
+    "secondary": ("road", 0.4, 150, 0.44), "secondary_link": ("road", 0.3, 40, 0.43),
+    "tertiary": ("minor", 0.35, 50, 0.42), "tertiary_link": ("minor", 0.25, 20, 0.41),
+    "unclassified": ("minor", 0.25, 15, 0.40), "residential": ("minor", 0.2, 15, 0.40),
+    "living_street": ("minor", 0.2, 15, 0.40),
+}
+# Place labels: font size (pt), largest map scale (meters/pixel) where the kind is shown, and minimum
+# population per meter/pixel (e.g. 80 -> towns above ~10 000 inhabitants on a 130 m/px country map).
+LABEL_FONT_PT = {"capital": 11, "city": 9, "town": 7.5, "village": 6.5, "suburb": 6.5}
+LABEL_MAX_MPP = {"capital": 1e9, "city": 1e9, "town": 400, "village": 40, "suburb": 5}
+LABEL_MIN_POP_PER_MPP = {"capital": 0, "city": 0, "town": 80, "village": 150, "suburb": 0}
 TARGET_MAP_WIDTH_PX = 2000
 
 COLORMAP = "turbo"

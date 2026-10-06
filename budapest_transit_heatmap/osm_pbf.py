@@ -146,9 +146,16 @@ class Block:
 
     def ways(self):
         """Yield the raw bytes of every Way message."""
+        yield from self._members(3)
+
+    def relations(self):
+        """Yield the raw bytes of every Relation message."""
+        yield from self._members(4)
+
+    def _members(self, field):
         for g in self.groups:
             for fn, val in fields(g):
-                if fn == 3:
+                if fn == field:
                     yield val
 
     def dense_nodes(self):
@@ -181,18 +188,38 @@ def _int64(v):
     return v - (1 << 64) if v >= 1 << 63 else v
 
 
-def dense_tagged(kv, n_nodes, key_idx, val_idx):
-    """Boolean mask of dense nodes carrying tag key=val, from a DenseNodes keys_vals array.
+def _dense_layout(kv):
+    """(node index of every keys_vals position, segment starts, is-key mask) of a DenseNodes keys_vals array.
 
     keys_vals is, per node, k1 v1 k2 v2 ... 0 (string-table indices).
     """
+    zero = kv == 0
+    node_of = np.cumsum(zero) - zero
+    seg_start = np.flatnonzero(np.r_[True, zero[:-1]])
+    is_key = ((np.arange(len(kv)) - seg_start[node_of]) % 2 == 0) & ~zero
+    return node_of, seg_start, is_key
+
+
+def dense_tagged(kv, n_nodes, key_idx, val_idx):
+    """Boolean mask of dense nodes carrying tag key=val."""
     mask = np.zeros(n_nodes, bool)
     if not len(kv) or key_idx is None or val_idx is None:
         return mask
-    zero = kv == 0
-    node_of = np.cumsum(zero) - zero  # node index of every position
-    seg_start = np.flatnonzero(np.r_[True, zero[:-1]])  # first position of every node's segment
-    is_key = ((np.arange(len(kv)) - seg_start[node_of]) % 2 == 0) & ~zero
+    node_of, _, is_key = _dense_layout(kv)
     hit = np.flatnonzero(is_key[:-1] & (kv[:-1] == key_idx) & (kv[1:] == val_idx))
     mask[node_of[hit]] = True
     return mask
+
+
+def dense_with_key(kv, key_idx, strings):
+    """{node index: tags dict} for the dense nodes that carry key `key_idx`."""
+    if not len(kv) or key_idx is None:
+        return {}
+    node_of, seg_start, is_key = _dense_layout(kv)
+    out = {}
+    for node in np.unique(node_of[np.flatnonzero(is_key & (kv == key_idx))]):
+        a = seg_start[node]
+        b = seg_start[node + 1] - 1 if node + 1 < len(seg_start) else len(kv) - 1
+        seg = kv[a:b].tolist()
+        out[int(node)] = {strings[k]: strings[v] for k, v in zip(seg[::2], seg[1::2])}
+    return out

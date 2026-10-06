@@ -16,11 +16,22 @@ pip install -r requirements.txt
 python budapest_transit_heatmap/main.py --start-lat 47.4979 --start-lon 19.0402 --datetime 2026-10-05T08:00:00
 ```
 See `--help` for all options (bbox, resolution, walk speed, transfer penalty, cutoff, output, cache dir).
-Defaults: departure next Monday 09:00, 67 m grid, 6000 px wide map (a ~6700 px, ~35 MB image; the first run
-downloads ~600 OSM tiles, cached afterwards). For a quick preview use e.g. `--resolution 200 --width-px 2000`.
+Defaults: departure next Monday 09:00, 67 m grid, 6000 px wide map (a ~6700 px image), heatmap opacity 0.275
+(`--overlay-alpha`) and isochrone lines every 60 min (`--contour-interval`). For a quick preview use e.g.
+`--resolution 200 --width-px 2000`.
 
 The first run downloads the BKK feed (~56 MB) and parses that day's timetable (~10 s); both are cached in
-`--cache-dir`, so later runs for the same date only take the time needed to fetch basemap tiles.
+`--cache-dir`, so later runs for the same date are fast.
+
+## Basemap and place labels
+By default (`--basemap osm`) the background is drawn from the same Geofabrik OpenStreetMap extract used for car routing:
+land, built-up areas, water, rivers, roads (detail depends on the map scale), railways, and national/county borders, with
+no labels. Place names are drawn by the program instead, readable at any output size: the capital and cities always,
+towns and villages only when the scale allows (population thresholds in `config.py`), and suburbs only on strongly
+zoomed-in maps. Labels are placed in order of importance and skipped when they would overlap an earlier label, the
+origin flag or the info box. `--label-scale` changes their size. The first run parses the extract once (~35 s, cached).
+The extract covers Hungary only, so areas across the border stay blank.
+`--basemap tiles` uses the OSM raster tiles (with their small built-in labels) instead; `--basemap none` draws nothing.
 
 ## Regional feeds (MÁV / Volánbusz)
 The BKK feed does not cover Érd or the regional trains. MÁV-csoport only gives out its GTFS after

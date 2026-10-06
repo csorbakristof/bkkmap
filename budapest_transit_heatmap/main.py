@@ -14,6 +14,7 @@ from csa_solver import solve_csa
 from downloader import download_gtfs_feeds, download_osm_pbf
 from grid_evaluator import compute_travel_time_grid
 from gtfs_parser import build_timetable
+from osm_features import load_basemap_features
 from osm_roads import load_road_graph
 from renderer import render_map
 
@@ -59,6 +60,10 @@ def parse_args(argv=None):
                    help="Minutes to get into the car and start driving")
     p.add_argument("--car-egress-min", type=float, default=DEFAULT_CAR_EGRESS_MIN,
                    help="Minutes to find parking and leave the car")
+    p.add_argument("--basemap", choices=("osm", "tiles", "none"), default="osm",
+                   help="Background: drawn from OSM data with our own place labels (default), "
+                        "OSM raster tiles, or none")
+    p.add_argument("--label-scale", type=float, default=1.0, help="Size multiplier for place labels (--basemap osm)")
     args = p.parse_args(argv)
 
     min_lat, min_lon, max_lat, max_lon = args.bbox
@@ -100,10 +105,16 @@ def main(argv=None):
             tau = solve_csa(connections, stops, args.start_lat, args.start_lon, departure_sec, args.walk_speed,
                             args.max_walk_time, args.transfer_penalty, args.max_cutoff)
 
+    roads = features = None
+    if args.car or args.basemap == "osm":
+        with step("Load OSM data"):
+            pbf = download_osm_pbf(cache_dir, args.osm_pbf)
+            roads = load_road_graph(pbf, args.bbox, cache_dir)
+            if args.basemap == "osm":
+                features = load_basemap_features(pbf, cache_dir)
+
     car_minutes = None
     if args.car:
-        with step("Load road network"):
-            roads = load_road_graph(download_osm_pbf(cache_dir, args.osm_pbf), args.bbox, cache_dir)
         with step("Route (car Dijkstra)"):
             node_minutes = solve_car(roads, args.start_lat, args.start_lon, args.walk_speed, args.car_access_min,
                                      args.traffic_factor, args.max_cutoff)
@@ -121,7 +132,7 @@ def main(argv=None):
         metadata = [
             f"Departure: {dt:%Y-%m-%d %H:%M} ({dt:%A})",
             f"Origin: {args.start_lat:.5f}, {args.start_lon:.5f}",
-            f"Modes: {modes} (fastest per cell)",
+            f"Modes: {modes}" + (" (fastest per cell)" if args.transit and args.car else ""),
             f"Travel time: {grid.min():.0f}-{grid.max():.0f} min (cap {args.max_cutoff:.0f})",
             f"Walk {args.walk_speed:g} km/h, max {args.max_walk_time:g} min"
             + (f"; transfer +{args.transfer_penalty:g} min" if args.transit else ""),
@@ -132,7 +143,8 @@ def main(argv=None):
         metadata.append((f"Feeds: {', '.join(feeds)}  |  " if args.transit else "") + f"grid {args.resolution} m")
         render_map(grid, extent, args.bbox, args.start_lat, args.start_lon, args.output, metadata,
                    tile_cache=cache_dir / "tiles", width_px=args.width_px,
-                   overlay_alpha=args.overlay_alpha, contour_interval=args.contour_interval)
+                   overlay_alpha=args.overlay_alpha, contour_interval=args.contour_interval,
+                   basemap=args.basemap, osm_features=features, roads=roads, label_scale=args.label_scale)
     return 0
 
 
