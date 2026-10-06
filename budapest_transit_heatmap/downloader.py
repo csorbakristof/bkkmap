@@ -59,7 +59,15 @@ def download_gtfs_feeds(cache_dir, max_age_days=FEED_MAX_AGE_DAYS, extra_feeds=(
     paths: dict[str, Path] = {}
 
     for name, feed in GTFS_FEEDS.items():
-        path = _fetch(name, feed["url"], cache_dir, max_age_days)
+        if feed["url"] is None:  # manually obtained feed
+            path = cache_dir / f"{name}.zip"
+            if path.exists():
+                log.info("Feed %s: using manually placed %s", name, path)
+            else:
+                log.warning("Feed %s: %s not found, skipping", name, path)
+                path = None
+        else:
+            path = _fetch(name, feed["url"], cache_dir, max_age_days)
         if path is None and feed["required"]:
             raise RuntimeError(f"Required GTFS feed '{name}' could not be downloaded")
         if path is not None:

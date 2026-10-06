@@ -11,11 +11,10 @@ GTFS_FEEDS = {
         "url": "https://go.bkk.hu/api/static/v1/public-gtfs/budapest_gtfs.zip",
         "required": True,
     },
-    # MÁV-csoport publishes GTFS only after registration
-    # (https://www.mavcsoport.hu/gtfs-igenybejelento). Put the received zips into
-    # the cache dir as mav.zip / volanbusz.zip, or pass --extra-feed.
-    "mav": {"url": "https://gtfs.menetbrand.com/mav/gtfs.zip", "required": False},
-    "volanbusz": {"url": "https://gtfs.menetbrand.com/volanbusz/gtfs.zip", "required": False},
+    # MÁV-csoport and Volánbusz publish GTFS only after registration, so there is no
+    # download URL: place the archives in the cache dir as mav.zip / volan.zip.
+    "mav": {"url": None, "required": False},
+    "volan": {"url": None, "required": False},
 }
 FEED_MAX_AGE_DAYS = 7
 HTTP_USER_AGENT = "budapest-transit-heatmap/0.1 (python-requests; personal non-bulk use)"

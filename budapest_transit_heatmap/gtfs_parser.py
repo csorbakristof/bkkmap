@@ -1,4 +1,5 @@
 """Active service resolution, spatial stop filtering and connection extraction."""
+import hashlib
 import io
 import logging
 import zipfile
@@ -13,7 +14,7 @@ from geo import haversine_m
 
 log = logging.getLogger(__name__)
 
-PARSED_CACHE_VERSION = 1
+PARSED_CACHE_VERSION = 2
 STOP_TIMES_CHUNK_ROWS = 1_000_000
 
 
@@ -49,11 +50,13 @@ def _gtfs_time_to_sec(s: pd.Series) -> np.ndarray:
     return (parts[0] * 3600 + parts[1] * 60 + parts[2]).to_numpy(np.int32)
 
 
-def _feed_connections(zf: zipfile.ZipFile, day: date) -> dict[str, np.ndarray]:
+def _feed_connections(zf: zipfile.ZipFile, day: date, stop_ids: set[str]) -> dict[str, np.ndarray]:
     """Elementary connections of one feed valid on `day`.
 
     Includes trips of the previous service day that run past midnight (GTFS times
     > 24:00:00), shifted by -24h so all times are relative to `day` midnight.
+    Only stop_times at `stop_ids` are read (nationwide feeds are huge); a trip leaving
+    and re-entering the area still yields a valid stop-to-stop connection.
     """
     trips = _read_csv(zf, "trips.txt", usecols=["trip_id", "service_id"])
     day_trips = []
@@ -74,7 +77,7 @@ def _feed_connections(zf: zipfile.ZipFile, day: date) -> dict[str, np.ndarray]:
         reader = pd.read_csv(io.TextIOWrapper(f, encoding="utf-8-sig"), dtype=str, usecols=cols,
                              chunksize=STOP_TIMES_CHUNK_ROWS)
         for chunk in reader:
-            chunk = chunk[chunk["trip_id"].isin(wanted)]
+            chunk = chunk[chunk["trip_id"].isin(wanted) & chunk["stop_id"].isin(stop_ids)]
             # Times may be blank for non-timepoints; GTFS requires them at least at ends.
             chunk = chunk.dropna(subset=["arrival_time", "departure_time"])
             chunks.append(chunk)
@@ -105,11 +108,12 @@ def _feed_connections(zf: zipfile.ZipFile, day: date) -> dict[str, np.ndarray]:
     }
 
 
-def _load_feed(name: str, zf: zipfile.ZipFile, day: date, cache_dir: Path):
+def _load_feed(name: str, zf: zipfile.ZipFile, day: date, cache_dir: Path, bbox, buffer_m):
     """Stops and connections for one feed, cached on disk per (feed version, date)."""
     src = Path(zf.filename)
     stamp = int(src.stat().st_mtime)
-    cache = cache_dir / "parsed" / f"{name}_{day:%Y%m%d}_{stamp}_v{PARSED_CACHE_VERSION}.npz"
+    area = hashlib.md5(repr((tuple(bbox), buffer_m)).encode()).hexdigest()[:8]
+    cache = cache_dir / "parsed" / f"{name}_{day:%Y%m%d}_{stamp}_{area}_v{PARSED_CACHE_VERSION}.npz"
     if cache.exists():
         log.info("Feed %s: loading parsed connections from %s", name, cache.name)
         data = dict(np.load(cache, allow_pickle=False))
@@ -117,7 +121,9 @@ def _load_feed(name: str, zf: zipfile.ZipFile, day: date, cache_dir: Path):
         log.info("Feed %s: parsing timetable for %s", name, day)
         stops = _read_csv(zf, "stops.txt", usecols=lambda c: c in {"stop_id", "stop_name", "stop_lat", "stop_lon"})
         stops = stops.dropna(subset=["stop_lat", "stop_lon"])
-        data = _feed_connections(zf, day)
+        stops = stops[_in_buffered_bbox(stops["stop_lat"].astype(float).to_numpy(),
+                                        stops["stop_lon"].astype(float).to_numpy(), bbox, buffer_m)]
+        data = _feed_connections(zf, day, set(stops["stop_id"]))
         data.update(stop_id=stops["stop_id"].to_numpy(str),
                     stop_name=stops["stop_name"].fillna("").to_numpy(str),
                     stop_lat=stops["stop_lat"].astype(float).to_numpy(),
@@ -149,7 +155,7 @@ def build_timetable(feeds: dict[str, zipfile.ZipFile], day: date, bbox, cache_di
     trip_offset = 0
     for name, zf in feeds.items():
         try:
-            d = _load_feed(name, zf, day, cache_dir)
+            d = _load_feed(name, zf, day, cache_dir, bbox, buffer_m)
         except Exception as exc:  # noqa: BLE001 - one broken optional feed should not kill the run
             log.warning("Feed %s: could not be parsed (%s); skipping", name, exc)
             continue

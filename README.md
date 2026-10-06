@@ -25,7 +25,7 @@ The first run downloads the BKK feed (~56 MB) and parses that day's timetable (~
 ## Regional feeds (MÁV / Volánbusz)
 The BKK feed does not cover Érd or the regional trains. MÁV-csoport only gives out its GTFS after
 [registration](https://www.mavcsoport.hu/gtfs-igenybejelento); the mirror URLs in the spec are offline.
-Once you have the archives, either drop them into the cache dir as `mav.zip` / `volanbusz.zip`, or pass
+Once you have the archives, drop them into the cache dir as `mav.zip` / `volan.zip` (picked up automatically), or pass
 `--extra-feed path/or/url.zip` (repeatable). All feeds are merged into one timetable.
 
 ## Modelling notes
