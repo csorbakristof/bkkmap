@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from config import DEFAULT_BBOX
+from config import DEFAULT_BBOX, OVERLAY_ALPHA
 from csa_solver import solve_csa
 from downloader import download_gtfs_feeds
 from grid_evaluator import compute_travel_time_grid
@@ -39,6 +39,8 @@ def parse_args(argv=None):
     p.add_argument("--max-cutoff", type=float, default=180.0, help="Travel time horizon in minutes")
     p.add_argument("--output", default="transit_heatmap.png")
     p.add_argument("--width-px", type=int, default=6000, help="Width of the map area in the output image (pixels)")
+    p.add_argument("--overlay-alpha", type=float, default=OVERLAY_ALPHA, help="Opacity of the heatmap layer (0-1)")
+    p.add_argument("--contour-interval", type=float, default=15.0, help="Isochrone contour spacing in minutes")
     p.add_argument("--cache-dir", default="./gtfs_cache")
     p.add_argument("--extra-feed", action="append", default=[],
                    help="Additional GTFS zip (URL or local path); may be repeated")
@@ -89,7 +91,8 @@ def main(argv=None):
             f"Feeds: {', '.join(feeds)}  |  grid {args.resolution} m",
         ]
         render_map(grid, extent, args.bbox, args.start_lat, args.start_lon, args.output, metadata,
-                   tile_cache=cache_dir / "tiles", width_px=args.width_px)
+                   tile_cache=cache_dir / "tiles", width_px=args.width_px,
+                   overlay_alpha=args.overlay_alpha, contour_interval=args.contour_interval)
     return 0
 
 

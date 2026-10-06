@@ -119,7 +119,7 @@ def _draw_scale_bar(ax, extent, center_lat):
 
 
 def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, metadata, tile_cache=None,
-               width_px=TARGET_MAP_WIDTH_PX):
+               width_px=TARGET_MAP_WIDTH_PX, overlay_alpha=OVERLAY_ALPHA, contour_interval=15.0):
     """Write the heatmap PNG. `extent` is the grid's (left, right, bottom, top) in EPSG:3857."""
     vmin, vmax = float(np.min(grid_matrix)), float(np.max(grid_matrix))
     if vmax - vmin < 1e-6:
@@ -138,10 +138,10 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
 
     norm = Normalize(vmin=vmin, vmax=vmax)
     im = ax.imshow(grid_matrix, extent=extent, origin="upper", cmap=COLORMAP, norm=norm,
-                   alpha=OVERLAY_ALPHA, interpolation="nearest", zorder=1)
+                   alpha=overlay_alpha, interpolation="nearest", zorder=1)
 
-    # Isochrone contour lines every 15 minutes help read the gradient.
-    levels = np.arange(15, vmax, 15)
+    # Isochrone contour lines help read the gradient.
+    levels = np.arange(contour_interval, vmax, contour_interval)
     if len(levels):
         xs = np.linspace(extent[0], extent[1], grid_matrix.shape[1])
         ys = np.linspace(extent[3], extent[2], grid_matrix.shape[0])
