@@ -18,7 +18,7 @@ from PIL import Image  # noqa: E402
 from pyproj import Transformer  # noqa: E402
 
 from config import (BASEMAP_DESATURATION, COLORMAP, EPSG_WEB_MERCATOR, EPSG_WGS84, HTTP_USER_AGENT, OUTPUT_DPI,  # noqa: E402
-                    OVERLAY_ALPHA, TARGET_MAP_WIDTH_PX, TILE_ATTRIBUTION, TILE_SIZE, TILE_URL)
+                    CONTOUR_INTERVAL_MIN, OVERLAY_ALPHA, TARGET_MAP_WIDTH_PX, TILE_ATTRIBUTION, TILE_SIZE, TILE_URL)
 
 log = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ def _draw_scale_bar(ax, extent, center_lat):
 
 
 def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, metadata, tile_cache=None,
-               width_px=TARGET_MAP_WIDTH_PX, overlay_alpha=OVERLAY_ALPHA, contour_interval=15.0):
+               width_px=TARGET_MAP_WIDTH_PX, overlay_alpha=OVERLAY_ALPHA, contour_interval=CONTOUR_INTERVAL_MIN):
     """Write the heatmap PNG. `extent` is the grid's (left, right, bottom, top) in EPSG:3857."""
     vmin, vmax = float(np.min(grid_matrix)), float(np.max(grid_matrix))
     if vmax - vmin < 1e-6:

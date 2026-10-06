@@ -28,6 +28,20 @@ The BKK feed does not cover Érd or the regional trains. MÁV-csoport only gives
 Once you have the archives, drop them into the cache dir as `mav.zip` / `volan.zip` (picked up automatically), or pass
 `--extra-feed path/or/url.zip` (repeatable). All feeds are merged into one timetable.
 
+## Car travel (OpenStreetMap roads)
+Modes are switched with `--transit/--no-transit` (default on) and `--car/--no-car` (default off); with both on every cell
+shows the faster mode. Example, car only:
+```
+python budapest_transit_heatmap/main.py --start-lat 47.4711 --start-lon 19.0282 --no-transit --car
+```
+The first car run downloads the Geofabrik Hungary extract (~330 MB, refreshed after 30 days) and parses it once
+(~30 s, cached in `--cache-dir/parsed`); `--osm-pbf` takes another local `.osm.pbf` or URL. Car options:
+`--traffic-factor` (multiplier on speeds, default 1), `--car-access-min` (default 2) and `--car-egress-min`
+(parking, default 5). Speeds are the tagged/default speed limit times a per-class share (in `config.py`)
+plus 15 s per traffic signal — a weekday-morning estimate without live traffic or turn restrictions. Trips cannot
+start or end on motorways/trunk roads; cells more than 500 m from a road are reached on foot. See
+[car_travel.md](car_travel.md) for the design.
+
 ## Modelling notes
 - Walking = haversine distance × 1.25 at the given speed; transfers between stops within a 5 min walk are allowed.
 - `--max-walk-time` limits the walk from the origin to the first stop. The walk after the last stop is unlimited

@@ -74,11 +74,13 @@ def propagate_walking(seed_minutes, resolution_m, walk_speed, max_cutoff):
 
 
 def compute_travel_time_grid(bbox, resolution_m, start_lat, start_lon, stops_df, tau, departure_sec,
-                             walk_speed, max_walk_time, max_cutoff):
+                             walk_speed, max_walk_time, max_cutoff, car_minutes=None):
     """Travel time in minutes for every grid cell, capped at max_cutoff.
 
     max_walk_time bounds the exact stop-to-cell walk; longer walks after the last
     stop are covered by propagating walking times over the grid.
+    Transit is skipped when tau is None. car_minutes, if given, is a function
+    (cell_lat, cell_lon) -> door-to-door car minutes; each cell keeps the fastest mode.
 
     Returns (grid_minutes [nrows, ncols], extent_3857).
     """
@@ -88,8 +90,13 @@ def compute_travel_time_grid(bbox, resolution_m, start_lat, start_lon, stops_df,
 
     best = walk_minutes(haversine_m(start_lat, start_lon, flat_lat, flat_lon), walk_speed)
 
-    rel = (tau - departure_sec) / 60.0
-    reached = np.flatnonzero(np.isfinite(rel) & (rel <= max_cutoff))
+    if car_minutes is not None:
+        best = np.minimum(best, car_minutes(flat_lat, flat_lon))
+
+    reached = []
+    if tau is not None:
+        rel = (tau - departure_sec) / 60.0
+        reached = np.flatnonzero(np.isfinite(rel) & (rel <= max_cutoff))
     if len(reached):
         s_lat = stops_df["lat"].to_numpy()[reached]
         s_lon = stops_df["lon"].to_numpy()[reached]

@@ -7,7 +7,8 @@ from pathlib import Path
 
 import requests
 
-from config import FEED_MAX_AGE_DAYS, GTFS_FEEDS, HTTP_USER_AGENT
+from config import FEED_MAX_AGE_DAYS, GTFS_FEEDS, HTTP_USER_AGENT, OSM_PBF_MAX_AGE_DAYS, OSM_PBF_URL
+from osm_pbf import is_pbf
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +17,12 @@ def _is_fresh(path: Path, max_age_days: float) -> bool:
     return path.exists() and (time.time() - path.stat().st_mtime) < max_age_days * 86400
 
 
-def _download(url: str, dest: Path) -> None:
+def _is_gtfs(path: Path) -> bool:
+    with zipfile.ZipFile(path) as zf:
+        return "stop_times.txt" in zf.namelist()
+
+
+def _download(url: str, dest: Path, validate=_is_gtfs) -> None:
     tmp = dest.with_suffix(".part")
     with requests.get(url, headers={"User-Agent": HTTP_USER_AGENT}, stream=True, timeout=60) as r:
         r.raise_for_status()
@@ -24,9 +30,8 @@ def _download(url: str, dest: Path) -> None:
             for chunk in r.iter_content(chunk_size=1 << 20):
                 f.write(chunk)
     # Validate before replacing a possibly good cached copy.
-    with zipfile.ZipFile(tmp) as zf:
-        if "stop_times.txt" not in zf.namelist():
-            raise ValueError(f"{url} is not a GTFS archive (no stop_times.txt)")
+    if not validate(tmp):
+        raise ValueError(f"{url} did not return the expected file type")
     os.replace(tmp, dest)
 
 
@@ -91,3 +96,28 @@ def download_gtfs_feeds(cache_dir, max_age_days=FEED_MAX_AGE_DAYS, extra_feeds=(
             paths[path.stem] = path
 
     return {name: zipfile.ZipFile(path) for name, path in paths.items()}
+
+
+def download_osm_pbf(cache_dir, src=None, max_age_days=OSM_PBF_MAX_AGE_DAYS):
+    """Path of the OSM road data extract: `src` if it is a local file, else a cached download."""
+    if src and not src.startswith(("http://", "https://")):
+        path = Path(src)
+        if not path.exists():
+            raise FileNotFoundError(src)
+        return path
+    url = src or OSM_PBF_URL
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    dest = cache_dir / url.rsplit("/", 1)[-1]
+    if _is_fresh(dest, max_age_days):
+        log.info("OSM roads: using cached %s", dest)
+        return dest
+    try:
+        log.info("OSM roads: downloading %s", url)
+        _download(url, dest, validate=is_pbf)
+        log.info("OSM roads: saved %.1f MB", dest.stat().st_size / 1e6)
+    except Exception as exc:  # noqa: BLE001 - network errors of all kinds
+        if not dest.exists():
+            raise RuntimeError(f"OSM extract could not be downloaded: {exc}") from exc
+        log.warning("OSM roads: download failed (%s); using stale cached copy", exc)
+    return dest
