@@ -8,8 +8,8 @@ from matplotlib.patches import PathPatch
 from matplotlib.path import Path as MplPath
 from pyproj import Transformer
 
-from config import (BASEMAP_COLORS, EPSG_WEB_MERCATOR, EPSG_WGS84, LABEL_FONT_PT, LABEL_MIN_POP_PER_MPP,
-                    LABEL_MAX_MPP, ROAD_STYLE)
+from config import (BASEMAP_COLORS, EPSG_WEB_MERCATOR, EPSG_WGS84, LABEL_FONT_PT, LABEL_MAX_MPP,
+                    LABEL_MIN_POP_PER_MPP, PLAIN_SUBURB_MAX_MPP, ROAD_STYLE)
 from osm_features import PLACE_KINDS
 
 _to_merc = Transformer.from_crs(EPSG_WGS84, EPSG_WEB_MERCATOR, always_xy=True)
@@ -119,13 +119,17 @@ def draw_place_labels(ax, feat, extent, mpp, avoid=(), scale=1.0):
         kind = PLACE_KINDS[feat["place_kind"][i]]
         if mpp > LABEL_MAX_MPP[kind] or feat["place_pop"][i] < LABEL_MIN_POP_PER_MPP[kind] * mpp:
             continue
+        # Lesser-known suburbs (no wikidata/wikipedia link in OSM) only on closer-in maps, with more spacing.
+        plain = kind == "suburb" and not feat["place_notable"][i]
+        if plain and mpp > PLAIN_SUBURB_MAX_MPP:
+            continue
         size = LABEL_FONT_PT[kind] * scale
         t = ax.text(x[i], y[i], feat["place_name"][i], ha="center", va="center", fontsize=size,
                     fontweight="bold" if kind in ("capital", "city") else "normal",
                     fontstyle="italic" if kind == "suburb" else "normal",
                     color=BASEMAP_COLORS["label"], path_effects=halo, zorder=4, clip_on=True)
         text_box = t.get_window_extent(renderer)
-        pad = 0.6 * text_box.height
+        pad = (1.0 if plain else 0.6) * text_box.height
         box = text_box.expanded((text_box.width + 2 * pad) / text_box.width,
                                 (text_box.height + 2 * pad) / text_box.height)
         # Centered on the place first; if that collides (e.g. with the origin flag), try beside it.

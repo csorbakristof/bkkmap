@@ -27,8 +27,8 @@ The first run downloads the BKK feed (~56 MB) and parses that day's timetable (~
 By default (`--basemap osm`) the background is drawn from the same Geofabrik OpenStreetMap extract used for car routing:
 land, built-up areas, water, rivers, roads (detail depends on the map scale), railways, and national/county borders, with
 no labels. Place names are drawn by the program instead, readable at any output size: the capital and cities always,
-towns and villages only when the scale allows (population thresholds in `config.py`), and suburbs only on strongly
-zoomed-in maps. Labels are placed in order of importance and skipped when they would overlap an earlier label, the
+towns and villages only when the scale allows (population thresholds in `config.py`), and neighbourhoods (OSM
+`place=suburb`) on city-scale maps: well-known ones up to 15 m/pixel, lesser known ones up to 10 m/pixel with extra spacing. Labels are placed in order of importance and skipped when they would overlap an earlier label, the
 origin flag or the info box. `--label-scale` changes their size. The first run parses the extract once (~35 s, cached).
 The extract covers Hungary only, so areas across the border stay blank.
 `--basemap tiles` uses the OSM raster tiles (with their small built-in labels) instead; `--basemap none` draws nothing.

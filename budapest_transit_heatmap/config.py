@@ -87,7 +87,8 @@ ROAD_STYLE = {
 # Place labels: font size (pt), largest map scale (meters/pixel) where the kind is shown, and minimum
 # population per meter/pixel (e.g. 80 -> towns above ~10 000 inhabitants on a 130 m/px country map).
 LABEL_FONT_PT = {"capital": 11, "city": 9, "town": 7.5, "village": 6.5, "suburb": 6.5}
-LABEL_MAX_MPP = {"capital": 1e9, "city": 1e9, "town": 400, "village": 40, "suburb": 5}
+LABEL_MAX_MPP = {"capital": 1e9, "city": 1e9, "town": 400, "village": 40, "suburb": 15}
+PLAIN_SUBURB_MAX_MPP = 10  # suburbs without a wikidata/wikipedia tag (mostly small hills, estates)
 LABEL_MIN_POP_PER_MPP = {"capital": 0, "city": 0, "town": 80, "village": 150, "suburb": 0}
 TARGET_MAP_WIDTH_PX = 2000
 

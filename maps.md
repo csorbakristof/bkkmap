@@ -3,6 +3,13 @@
 All maps: departure **2026-10-12 09:00** (Monday), 4000 px wide (`--width-px 4000`), heatmap opacity and basemap at the program defaults
 (opacity 0.275, drawn OSM basemap with own labels). Output goes to `out/`.
 
+## Place labels
+Labels follow the map scale (`config.py`: `LABEL_MAX_MPP`, `PLAIN_SUBURB_MAX_MPP`):
+- **Budapest, Budapest + Pomáz and Agglomeration maps (≈8–10 m per pixel):** capital, cities, towns, villages and — new — neighbourhood
+  names (OSM `place=suburb`, e.g. Óbuda, Kelenföld, Újlipótváros, Csepel-Belváros): the well-known ones (with a Wikipedia/Wikidata link
+  in OSM) and, with extra spacing, the lesser known ones. About 150–250 labels per map, never overlapping each other, the flag or the info box.
+- **Hungary map (≈130 m per pixel):** capital, cities and towns above ~10 000 inhabitants only; neighbourhoods and villages are not shown.
+
 ## Locations
 | Id | Address | Latitude | Longitude | Note |
 |----|---------|----------|----------|------|
@@ -14,11 +21,12 @@ All maps: departure **2026-10-12 09:00** (Monday), 4000 px wide (`--width-px 400
 | Level | Bounding box (min lat, min lon, max lat, max lon) | Cell size | Max travel time | Contours |
 |-------|--------------------------------------------------|-----------|-----------------|----------|
 | Budapest | 47.34 18.93 47.62 19.34 (city limits) | 100 m | 120 min | 15 min |
-| Budapest + Pomáz | 47.34 18.93 47.67 19.34 (city limits plus Pomáz in the north) | 200 m | 180 min | 15 min |
+| Budapest + Pomáz | 47.34 18.93 47.72 19.34 (city limits plus Pomáz; extra room in the north keeps it clear of the info box) | 200 m | 180 min | 15 min |
 | Agglomeration | 47.33 18.81 47.62 19.34 (Budapest, Érd, Diósd, Tárnok) | 200 m | 180 min | 15 min |
 | Hungary | 45.74 16.11 48.59 22.90 | 250 m | 480 min | 60 min |
 
 ## Maps
+Maps 1–4 and 7–8 were regenerated with the neighbourhood labels; maps 5–6 are unchanged by them.
 Mode `T` = public transport only, `T+C` = public transport and car.
 Which level each origin gets: Morva utca → Agglomeration; Hunor utca → Budapest + Pomáz; Bartók Béla út → Agglomeration and Hungary.
 

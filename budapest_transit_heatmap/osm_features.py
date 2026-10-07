@@ -16,7 +16,7 @@ from osm_pbf import Block, dense_with_key, fields, iter_blocks, packed_list, zig
 
 log = logging.getLogger(__name__)
 
-FEATURES_CACHE_VERSION = 1
+FEATURES_CACHE_VERSION = 2
 LINE_LAYERS = ("river", "canal", "rail", "border2", "border6")
 POLYGON_LAYERS = ("water", "builtup")
 PLACE_KINDS = ("capital", "city", "town", "village", "suburb")
@@ -188,8 +188,9 @@ def _parse_pbf(path):
                 if tags.get(b"capital") in (b"yes", b"2") and kind == 1:
                     kind = 0
                 digits = _DIGITS.findall(tags.get(b"population", b"").replace(b" ", b""))
+                notable = b"wikidata" in tags or b"wikipedia" in tags  # mapped as a well-known place
                 places.append((name.decode(errors="replace"), kind, int(digits[0]) if digits else 0,
-                               float(nlat[i]), float(nlon[i])))
+                               float(nlat[i]), float(nlon[i]), notable))
 
     out = {}
 
@@ -211,12 +212,13 @@ def _parse_pbf(path):
         coords(lines[k], k)
     for k in POLYGON_LAYERS:
         coords([r for r, _ in rings[k]], k, [inner for _, inner in rings[k]])
-    places.sort(key=lambda p: (p[1], -p[2]))
+    places.sort(key=lambda p: (p[1], not p[5], -p[2]))  # per kind: notable first, then largest
     out["place_name"] = np.array([p[0] for p in places], dtype=str)
     out["place_kind"] = np.array([p[1] for p in places], np.int8)
     out["place_pop"] = np.array([p[2] for p in places], np.int64)
     out["place_lat"] = np.array([p[3] for p in places])
     out["place_lon"] = np.array([p[4] for p in places])
+    out["place_notable"] = np.array([p[5] for p in places], bool)
     log.info("OSM basemap: %s; %d places", ", ".join(f"{len(out[k + '_off']) - 1} {k}"
                                                    for k in LINE_LAYERS + POLYGON_LAYERS), len(places))
     return out
