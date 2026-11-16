@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from config import BBOX_BUFFER_M
+from config import BBOX_BUFFER_M, GTFS_FEEDS
 from geo import haversine_m
 
 log = logging.getLogger(__name__)
@@ -66,6 +66,8 @@ def _feed_connections(zf: zipfile.ZipFile, day: date, stop_ids: set[str]) -> dic
         t["offset"] = offset
         day_trips.append(t)
     day_trips = pd.concat(day_trips, ignore_index=True)
+    if day_trips.empty:
+        raise ValueError(f"no service on {day}: the feed's calendar does not cover this date")
     day_trips["trip_idx"] = np.arange(len(day_trips), dtype=np.int32)
     wanted = set(day_trips["trip_id"])
     log.info("  %d active trips (%d today, %d from previous day)", len(day_trips),
@@ -157,6 +159,8 @@ def build_timetable(feeds: dict[str, zipfile.ZipFile], day: date, bbox, cache_di
         try:
             d = _load_feed(name, zf, day, cache_dir, bbox, buffer_m)
         except Exception as exc:  # noqa: BLE001 - one broken optional feed should not kill the run
+            if GTFS_FEEDS.get(name, {}).get("required"):
+                raise RuntimeError(f"Required GTFS feed '{name}' is unusable for {day}: {exc}") from exc
             log.warning("Feed %s: could not be parsed (%s); skipping", name, exc)
             continue
         stop_frames.append(pd.DataFrame({

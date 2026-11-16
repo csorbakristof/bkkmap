@@ -20,6 +20,8 @@ from renderer import render_map
 
 log = logging.getLogger("transit_heatmap")
 
+HU_WEEKDAYS = ("hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat", "vasárnap")
+
 
 def next_monday_9am(now=None):
     """09:00 on the first Monday strictly after today."""
@@ -128,19 +130,21 @@ def main(argv=None):
                                                 tau, departure_sec, args.walk_speed, args.max_walk_time,
                                                 args.max_cutoff, car_minutes=car_minutes)
     with step("Render map"):
-        modes = " + ".join(m for m, on in (("public transport", args.transit), ("car", args.car)) if on)
+        modes = " + ".join(m for m, on in (("tömegközlekedés", args.transit), ("autó", args.car)) if on)
+        weekday = HU_WEEKDAYS[dt.weekday()]
         metadata = [
-            f"Departure: {dt:%Y-%m-%d %H:%M} ({dt:%A})",
-            f"Origin: {args.start_lat:.5f}, {args.start_lon:.5f}",
-            f"Modes: {modes}" + (" (fastest per cell)" if args.transit and args.car else ""),
-            f"Travel time: {grid.min():.0f}-{grid.max():.0f} min (cap {args.max_cutoff:.0f})",
-            f"Walk {args.walk_speed:g} km/h, max {args.max_walk_time:g} min"
-            + (f"; transfer +{args.transfer_penalty:g} min" if args.transit else ""),
+            f"Indulás: {dt:%Y-%m-%d %H:%M} ({weekday})",
+            f"Kiindulópont: {args.start_lat:.5f}, {args.start_lon:.5f}",
+            f"Módok: {modes}" + (" (cellánként a leggyorsabb)" if args.transit and args.car else ""),
+            f"Utazási idő: {grid.min():.0f}-{grid.max():.0f} perc (felső korlát: {args.max_cutoff:.0f})",
+            f"Gyaloglás {args.walk_speed:g} km/h, legfeljebb {args.max_walk_time:g} perc"
+            + (f"; átszállás +{args.transfer_penalty:g} perc" if args.transit else ""),
         ]
         if args.car:
-            metadata.append(f"Car: OSM roads, traffic factor {args.traffic_factor:g}, "
-                            f"+{args.car_access_min:g} min start, +{args.car_egress_min:g} min parking")
-        metadata.append((f"Feeds: {', '.join(feeds)}  |  " if args.transit else "") + f"grid {args.resolution} m")
+            metadata.append(f"Autó: OSM-úthálózat, forgalmi tényező {args.traffic_factor:g}, "
+                            f"+{args.car_access_min:g} perc indulás, +{args.car_egress_min:g} perc parkolás")
+        metadata.append((f"Adatforrások: {', '.join(feeds)}  |  " if args.transit else "")
+                        + f"rács: {args.resolution} m")
         render_map(grid, extent, args.bbox, args.start_lat, args.start_lon, args.output, metadata,
                    tile_cache=cache_dir / "tiles", width_px=args.width_px,
                    overlay_alpha=args.overlay_alpha, contour_interval=args.contour_interval,

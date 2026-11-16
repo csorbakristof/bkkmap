@@ -172,7 +172,7 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
     cb.solids.set_alpha(1.0)
     cb.locator = MaxNLocator(nbins=10, integer=True)
     cb.update_ticks()
-    cb.set_label("Travel time (minutes)")
+    cb.set_label("Utazási idő (perc)")
 
     scale_label = _draw_scale_bar(ax, extent, (bbox[0] + bbox[2]) / 2)
 

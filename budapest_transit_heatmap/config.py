@@ -66,7 +66,7 @@ MAX_TRANSFER_WALK_MIN = 5.0
 # disk per the OSM tile usage policy and desaturated before use.
 TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 TILE_SIZE = 256
-TILE_ATTRIBUTION = "© OpenStreetMap contributors"
+TILE_ATTRIBUTION = "© OpenStreetMap-közreműködők"
 BASEMAP_DESATURATION = 0.75  # 0 = original colors, 1 = grayscale
 
 # Basemap drawn from OSM data (--basemap osm): muted colors so the heatmap stays readable.
