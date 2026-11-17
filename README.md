@@ -30,7 +30,12 @@ no labels. Place names are drawn by the program instead, readable at any output 
 towns and villages only when the scale allows (population thresholds in `config.py`), and neighbourhoods (OSM
 `place=suburb`) on city-scale maps: well-known ones up to 15 m/pixel, lesser known ones up to 10 m/pixel with extra spacing. Labels are placed in order of importance and skipped when they would overlap an earlier label, the
 origin flag or the info box. `--label-scale` changes their size. The first run parses the extract once (~35 s, cached).
-The extract covers Hungary only, so areas across the border stay blank.
+The extract covers Hungary only, so on country-scale maps (≥ 50 m/pixel) the area across the border is filled from
+[Natural Earth](https://www.naturalearthdata.com/) (`natural_earth.py`, files cached in `gtfs_cache/naturalearth/`): rivers,
+lakes, neighbouring-country borders and cities above 50 000 inhabitants with Hungarian names (`HU_EXONYMS` in `config.py`).
+`--no-foreign` turns it off. The same maps get terrain relief (hillshade, `terrain.py`) from AWS Terrain Tiles
+(cached in `gtfs_cache/terrain/`), lit from the north-west with 4× vertical exaggeration; `--no-hillshade` turns it off.
+Both are skipped on city-scale maps.
 `--basemap tiles` uses the OSM raster tiles (with their small built-in labels) instead; `--basemap none` draws nothing.
 
 ## Regional feeds (MÁV / Volánbusz)

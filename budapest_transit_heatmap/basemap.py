@@ -68,9 +68,40 @@ def _draw_polygons(ax, feat, layer, extent, mpp, color, zorder):
     ax.add_patch(PathPatch(path, facecolor=color, edgecolor="none", zorder=zorder))
 
 
-def draw_osm_basemap(ax, feat, roads, extent, mpp):
+def _merc_lines(lonlat_list):
+    return [np.column_stack(_to_merc.transform(l[:, 0], l[:, 1])) for l in lonlat_list]
+
+
+def _draw_foreign(ax, foreign):
+    """Natural Earth lakes, rivers and borders outside Hungary (see natural_earth.py)."""
+    for ring in _merc_lines(foreign["lakes"]):
+        ax.add_patch(PathPatch(MplPath(ring), facecolor=BASEMAP_COLORS["water"], edgecolor="none", zorder=0.2))
+    for width in sorted({w for _, w in foreign["rivers"]}):
+        lines = _merc_lines([r for r, w in foreign["rivers"] if w == width])
+        ax.add_collection(LineCollection(lines, colors=BASEMAP_COLORS["water"], linewidths=width,
+                                         capstyle="round", zorder=0.31))
+    ax.add_collection(LineCollection(_merc_lines(foreign["borders"]), colors=BASEMAP_COLORS["border"],
+                                     linewidths=1.0, capstyle="round", zorder=0.56))
+
+
+def with_foreign_places(feat, foreign):
+    """feat with the foreign places merged in, ordered by kind and then population like the OSM places."""
+    keys = ("place_name", "place_kind", "place_pop", "place_lat", "place_lon")
+    merged = dict(feat)
+    for k in keys:
+        merged[k] = np.concatenate((feat[k], foreign[k]))
+    merged["place_notable"] = np.concatenate((feat["place_notable"], np.zeros(len(foreign["place_name"]), bool)))
+    order = np.lexsort((-merged["place_pop"] * 1, ~merged["place_notable"], merged["place_kind"]))
+    for k in (*keys, "place_notable"):
+        merged[k] = merged[k][order]
+    return merged
+
+
+def draw_osm_basemap(ax, feat, roads, extent, mpp, foreign=None):
     """Background, built-up areas, water, roads, railways and borders (no labels)."""
     ax.set_facecolor(BASEMAP_COLORS["land"])
+    if foreign is not None:
+        _draw_foreign(ax, foreign)
     _draw_polygons(ax, feat, "builtup", extent, mpp, BASEMAP_COLORS["builtup"], 0.1)
     _draw_polygons(ax, feat, "water", extent, mpp, BASEMAP_COLORS["water"], 0.2)
 

@@ -8,15 +8,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from car_router import car_cell_minutes, solve_car
-from config import (CONTOUR_INTERVAL_MIN, DEFAULT_BBOX, DEFAULT_CAR_ACCESS_MIN, DEFAULT_CAR_EGRESS_MIN,
+from config import (FOREIGN_MIN_MPP, HILLSHADE_MIN_MPP, CONTOUR_INTERVAL_MIN, DEFAULT_BBOX, DEFAULT_CAR_ACCESS_MIN, DEFAULT_CAR_EGRESS_MIN,
                     OVERLAY_ALPHA)
+from basemap import meters_per_pixel
 from csa_solver import solve_csa
 from downloader import download_gtfs_feeds, download_osm_pbf
 from grid_evaluator import compute_travel_time_grid
 from gtfs_parser import build_timetable
+from natural_earth import load_foreign_background
 from osm_features import load_basemap_features
 from osm_roads import load_road_graph
 from renderer import render_map
+from terrain import load_hillshade
 
 log = logging.getLogger("transit_heatmap")
 
@@ -65,6 +68,10 @@ def parse_args(argv=None):
     p.add_argument("--basemap", choices=("osm", "tiles", "none"), default="osm",
                    help="Background: drawn from OSM data with our own place labels (default), "
                         "OSM raster tiles, or none")
+    p.add_argument("--foreign", action=argparse.BooleanOptionalAction, default=True,
+                   help="Natural Earth rivers, lakes, borders and cities outside Hungary on country-scale maps")
+    p.add_argument("--hillshade", action=argparse.BooleanOptionalAction, default=True,
+                   help="Terrain relief shading on country-scale maps")
     p.add_argument("--label-scale", type=float, default=1.0, help="Size multiplier for place labels (--basemap osm)")
     args = p.parse_args(argv)
 
@@ -129,6 +136,16 @@ def main(argv=None):
         grid, extent = compute_travel_time_grid(args.bbox, args.resolution, args.start_lat, args.start_lon, stops,
                                                 tau, departure_sec, args.walk_speed, args.max_walk_time,
                                                 args.max_cutoff, car_minutes=car_minutes)
+    foreign = terrain = None
+    center_lat = (args.bbox[0] + args.bbox[2]) / 2
+    mpp = meters_per_pixel(extent, args.width_px, center_lat)
+    if args.basemap == "osm" and args.hillshade and mpp >= HILLSHADE_MIN_MPP:
+        with step("Terrain relief (hillshade)"):
+            terrain = load_hillshade(cache_dir, extent, mpp, center_lat)
+    if args.basemap == "osm" and args.foreign:
+        if mpp >= FOREIGN_MIN_MPP:
+            with step("Load background outside Hungary (Natural Earth)"):
+                foreign = load_foreign_background(cache_dir, args.bbox)
     with step("Render map"):
         modes = " + ".join(m for m, on in (("tömegközlekedés", args.transit), ("autó", args.car)) if on)
         weekday = HU_WEEKDAYS[dt.weekday()]
@@ -148,7 +165,7 @@ def main(argv=None):
         render_map(grid, extent, args.bbox, args.start_lat, args.start_lon, args.output, metadata,
                    tile_cache=cache_dir / "tiles", width_px=args.width_px,
                    overlay_alpha=args.overlay_alpha, contour_interval=args.contour_interval,
-                   basemap=args.basemap, osm_features=features, roads=roads, label_scale=args.label_scale)
+                   basemap=args.basemap, osm_features=features, roads=roads, label_scale=args.label_scale, foreign=foreign, terrain=terrain)
     return 0
 
 

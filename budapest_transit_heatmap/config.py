@@ -92,6 +92,44 @@ PLAIN_SUBURB_MAX_MPP = 10  # suburbs without a wikidata/wikipedia tag (mostly sm
 LABEL_MIN_POP_PER_MPP = {"capital": 0, "city": 0, "town": 80, "village": 150, "suburb": 0}
 TARGET_MAP_WIDTH_PX = 2000
 
+# Outside Hungary (country-scale maps, mpp >= FOREIGN_MIN_MPP) the OSM extract is empty, so rivers, lakes,
+# borders and larger places come from Natural Earth.
+FOREIGN_MIN_MPP = 50
+NE_BASE_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson"
+NE_FILES = {"countries": "ne_10m_admin_0_countries", "borders": "ne_10m_admin_0_boundary_lines_land",
+            "lakes": "ne_10m_lakes", "lakes_europe": "ne_10m_lakes_europe",
+            "rivers": "ne_10m_rivers_lake_centerlines", "rivers_europe": "ne_10m_rivers_europe",
+            "places": "ne_10m_populated_places_simple"}
+# Hungarian names of neighbouring-country places (Natural Earth only has English / local names).
+HU_EXONYMS = {
+    "Vienna": "Bécs", "Graz": "Grác", "Eisenstadt": "Kismarton", "Klagenfurt": "Klagenfurt", "Bratislava": "Pozsony",
+    "Kosice": "Kassa", "Košice": "Kassa", "Nitra": "Nyitra", "Zilina": "Zsolna", "Žilina": "Zsolna",
+    "Banska Bystrica": "Besztercebánya", "Banská Bystrica": "Besztercebánya", "Trnava": "Nagyszombat",
+    "Presov": "Eperjes", "Prešov": "Eperjes", "Komarno": "Komárom", "Komárno": "Komárom",
+    "Uzhhorod": "Ungvár", "Mukacheve": "Munkács", "Berehove": "Beregszász", "Chernivtsi": "Csernovic",
+    "Ivano-Frankivsk": "Sztanyiszlav", "Lviv": "Lemberg", "Oradea": "Nagyvárad", "Cluj-Napoca": "Kolozsvár",
+    "Timisoara": "Temesvár", "Timișoara": "Temesvár", "Arad": "Arad", "Satu Mare": "Szatmárnémeti",
+    "Baia Mare": "Nagybánya", "Targu Mures": "Marosvásárhely", "Târgu Mureș": "Marosvásárhely",
+    "Sibiu": "Nagyszeben", "Brasov": "Brassó", "Brașov": "Brassó", "Alba Iulia": "Gyulafehérvár",
+    "Bucharest": "Bukarest", "Belgrade": "Belgrád", "Novi Sad": "Újvidék", "Subotica": "Szabadka",
+    "Zrenjanin": "Nagybecskerek", "Pancevo": "Pancsova", "Pančevo": "Pancsova", "Kikinda": "Nagykikinda",
+    "Zagreb": "Zágráb", "Osijek": "Eszék", "Varazdin": "Varasd", "Varaždin": "Varasd", "Ljubljana": "Ljubljana",
+    "Maribor": "Marburg", "Murska Sobota": "Muraszombat", "Sarajevo": "Szarajevó", "Tuzla": "Tuzla",
+    "Slavonski Brod": "Bród", "Vukovar": "Vukovár", "Cakovec": "Csáktornya", "Čakovec": "Csáktornya",
+    "Bjelovar": "Belovár", "Pecs": "Pécs", "Wiener Neustadt": "Bécsújhely", "Sankt Poelten": "Sankt Pölten",
+}
+
+# Terrain relief (hillshade) on country-scale maps from AWS Terrain Tiles (Mapzen/Terrarium encoding).
+HILLSHADE_MIN_MPP = 50
+TERRAIN_TILE_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+HILLSHADE_AZIMUTH_DEG = 315  # light from the north-west
+HILLSHADE_ALTITUDE_DEG = 40
+HILLSHADE_EXAGGERATION = 4.0  # the Hungarian hills are low
+HILLSHADE_DARK = (0.18, 0.16, 0.14)
+HILLSHADE_LIGHT = (1.0, 1.0, 0.98)
+FOREIGN_ATTRIBUTION = "Háttér Magyarországon kívül: Natural Earth"
+TERRAIN_ATTRIBUTION = "domborzat: AWS Terrain Tiles (SRTM, EU-DEM)"
+
 COLORMAP = "turbo"
 OVERLAY_ALPHA = 0.275
 CONTOUR_INTERVAL_MIN = 60.0  # isochrone lines at whole hours

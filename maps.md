@@ -44,8 +44,20 @@ Which level each origin gets: Morva utca → Agglomeration; Hunor utca → Budap
 | 8 | hunor-budapest-pomaz-TC.png | H | Budapest + Pomáz | T+C | 200 m | 180 | 15 |
 | 9 | bartok-agglo-50m-T.png | B | Agglomeration | T | 50 m | 180 | 5 |
 | 10 | bartok-agglo-50m-TC.png | B | Agglomeration | T+C | 50 m | 180 | 5 |
+| 11 | bartok-hungary-T-60x40.png | B | Hungary (60×40 cm print) | T | 250 m | 480 | 60 |
+
+Map 11 is a print version: 4724 × 3150 px (60 × 40 cm at 200 DPI), bbox `45.4333 16.11 48.8791 22.90` (Hungary centred, latitude padded to a 3:2 sheet), `--width-px 4218`.
+
+On country-scale maps (≥ 50 m per pixel, `--foreign`, on by default) the area outside Hungary is filled from Natural Earth (cached in `gtfs_cache/naturalearth/`): rivers, lakes, neighbouring borders and cities above 50 000 inhabitants with Hungarian names. Map 11 was made with it; maps 5–6 were not regenerated.
+
+Country-scale maps also get terrain relief (`--hillshade`, on by default; AWS Terrain Tiles cached in `gtfs_cache/terrain/`), light from the north-west, 4× vertical exaggeration. Map 11 has it.
 
 Maps 9–10 use `--max-walk-time 5` (default 30). The map legends (info box, colour bar, attribution) are in Hungarian.
+
+Command for map 11 (about 1.5 min; `--width-px` = image width / 1.12, because the colour bar adds 12 % to the width):
+```
+python budapest_transit_heatmap/main.py --start-lat 47.4710194 --start-lon 19.0280001 --datetime 2026-11-23T09:00:00   --bbox 45.4333 16.11 48.8791 22.90 --resolution 250 --max-cutoff 480 --contour-interval 60 --width-px 4218   --output out/bartok-hungary-T-60x40.png
+```
 
 ## Command template
 ```

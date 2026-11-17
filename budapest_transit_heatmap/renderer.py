@@ -17,9 +17,9 @@ from matplotlib.transforms import Affine2D, ScaledTranslation  # noqa: E402
 from PIL import Image  # noqa: E402
 from pyproj import Transformer  # noqa: E402
 
-from basemap import draw_osm_basemap, draw_place_labels, meters_per_pixel  # noqa: E402
+from basemap import draw_osm_basemap, draw_place_labels, meters_per_pixel, with_foreign_places  # noqa: E402
 from config import (BASEMAP_DESATURATION, COLORMAP, EPSG_WEB_MERCATOR, EPSG_WGS84, HTTP_USER_AGENT, OUTPUT_DPI,  # noqa: E402
-                    CONTOUR_INTERVAL_MIN, OVERLAY_ALPHA, TARGET_MAP_WIDTH_PX, TILE_ATTRIBUTION, TILE_SIZE, TILE_URL)
+                    CONTOUR_INTERVAL_MIN, FOREIGN_ATTRIBUTION, OVERLAY_ALPHA, TERRAIN_ATTRIBUTION, TARGET_MAP_WIDTH_PX, TILE_ATTRIBUTION, TILE_SIZE, TILE_URL)
 
 log = logging.getLogger(__name__)
 
@@ -122,7 +122,7 @@ def _draw_scale_bar(ax, extent, center_lat):
 
 def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, metadata, tile_cache=None,
                width_px=TARGET_MAP_WIDTH_PX, overlay_alpha=OVERLAY_ALPHA, contour_interval=CONTOUR_INTERVAL_MIN,
-               basemap="tiles", osm_features=None, roads=None, label_scale=1.0):
+               basemap="tiles", osm_features=None, roads=None, label_scale=1.0, foreign=None, terrain=None):
     """Write the heatmap PNG. `extent` is the grid's (left, right, bottom, top) in EPSG:3857.
 
     basemap: "osm" draws the background and place labels from osm_features/roads,
@@ -140,7 +140,9 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
 
     mpp = meters_per_pixel(extent, width_px, (bbox[0] + bbox[2]) / 2)
     if basemap == "osm":
-        draw_osm_basemap(ax, osm_features, roads, extent, mpp)
+        if terrain is not None:
+            ax.imshow(terrain[0], extent=terrain[1], origin="upper", interpolation="antialiased", zorder=0.05)
+        draw_osm_basemap(ax, osm_features, roads, extent, mpp, foreign)
     elif basemap == "tiles":
         tiles = fetch_basemap(extent, tile_cache, width_px)
         if tiles is not None:
@@ -178,10 +180,13 @@ def render_map(grid_matrix, extent, bbox, start_lat, start_lon, output_path, met
 
     info = ax.text(0.015, 0.985, "\n".join(metadata), transform=ax.transAxes, ha="left", va="top", fontsize=8,
                    zorder=9, bbox=dict(boxstyle="round", facecolor="white", alpha=0.85, edgecolor="gray"))
-    credit = ax.text(0.995, 0.005, TILE_ATTRIBUTION, transform=ax.transAxes, ha="right", va="bottom", fontsize=6,
+    credit = ax.text(0.995, 0.005, TILE_ATTRIBUTION + (f"  |  {FOREIGN_ATTRIBUTION}" if foreign else "")
+                     + (f"  |  {TERRAIN_ATTRIBUTION}" if terrain is not None else ""), transform=ax.transAxes, ha="right", va="bottom", fontsize=6,
                      zorder=9, bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1))
 
     if basemap == "osm":
+        if foreign:
+            osm_features = with_foreign_places(osm_features, foreign)
         draw_place_labels(ax, osm_features, extent, mpp, avoid=[info, credit, scale_label, *flag], scale=label_scale)
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
